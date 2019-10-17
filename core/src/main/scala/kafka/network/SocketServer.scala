@@ -55,6 +55,21 @@ import scala.collection.mutable.{ArrayBuffer, Buffer}
 import scala.util.control.ControlThrowable
 
 /**
+  * 处理与代理之间的新连接，请求和响应。 Kafka支持两种类型的请求平面：
+  * - 数据平面：
+  *   - 处理来自客户端和集群中其他代理的请求。
+  *   - 线程模型是每个侦听器1个受体线程，用于处理新连接。
+  *     通过在KafkaConfig中为“侦听器”指定多个“，”分隔的端点，可以配置多个数据平面。
+  *     接受者有N个处理器线程，每个线程都有自己的选择器并从套接字读取请求。
+  *     M个处理程序线程处理请求并向处理器线程返回响应以进行写入。
+  * - 控制平面：
+  *   - 处理来自控制器的请求。这是可选的，可以通过指定“ control.plane.listener.name”进行配置。
+  *   如果未配置，则控制器请求由数据平面处理。
+  *   - 线程模型是处理新连接的1个Acceptor线程。
+  *   Acceptor具有1个处理器线程，该线程具有自己的选择器并从套接字读取请求。
+  *   1个处理程序线程，用于处理请求并向处理器线程返回响应以进行写入
+  */
+/**
  * Handles new connections, requests and responses to and from broker.
  * Kafka supports two types of request planes :
  *  - data-plane :
@@ -89,10 +104,12 @@ class SocketServer(val config: KafkaConfig,
   memoryPoolSensor.add(new Meter(TimeUnit.MILLISECONDS, memoryPoolDepletedPercentMetricName, memoryPoolDepletedTimeMetricName))
   private val memoryPool = if (config.queuedMaxBytes > 0) new SimpleMemoryPool(config.queuedMaxBytes, config.socketRequestMaxBytes, false, memoryPoolSensor) else MemoryPool.NONE
   // data-plane
+  // 数据平面
   private val dataPlaneProcessors = new ConcurrentHashMap[Int, Processor]()
   private[network] val dataPlaneAcceptors = new ConcurrentHashMap[EndPoint, Acceptor]()
   val dataPlaneRequestChannel = new RequestChannel(maxQueuedRequests, DataPlaneMetricPrefix)
   // control-plane
+  // 控制平面
   private var controlPlaneProcessorOpt : Option[Processor] = None
   private[network] var controlPlaneAcceptorOpt : Option[Acceptor] = None
   val controlPlaneRequestChannelOpt: Option[RequestChannel] = config.controlPlaneListenerName.map(_ => new RequestChannel(20, ControlPlaneMetricPrefix))

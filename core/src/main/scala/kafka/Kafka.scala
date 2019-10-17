@@ -27,6 +27,9 @@ import org.apache.kafka.common.utils.{Java, LoggingSignalHandler, OperatingSyste
 
 import scala.collection.JavaConverters._
 
+/**
+  * kafka入口
+  */
 object Kafka extends Logging {
 
   def getPropsFromArgs(args: Array[String]): Properties = {
@@ -62,9 +65,15 @@ object Kafka extends Logging {
     props
   }
 
+  /**
+    * 入口
+    * @param args
+    */
   def main(args: Array[String]): Unit = {
     try {
+      //提取参数
       val serverProps = getPropsFromArgs(args)
+      //构建kafka服务启动对象
       val kafkaServerStartable = KafkaServerStartable.fromProps(serverProps)
 
       try {
@@ -77,11 +86,14 @@ object Kafka extends Logging {
       }
 
       // attach shutdown handler to catch terminating signals as well as normal termination
+      // 增加hook钩子，用于退出
       Runtime.getRuntime().addShutdownHook(new Thread("kafka-shutdown-hook") {
         override def run(): Unit = kafkaServerStartable.shutdown()
       })
 
+      //启动
       kafkaServerStartable.startup()
+      //等待结束
       kafkaServerStartable.awaitShutdown()
     }
     catch {

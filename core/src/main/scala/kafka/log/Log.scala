@@ -174,6 +174,12 @@ object RollParams {
  *
  * New log segments are created according to a configurable policy that controls the size in bytes or time interval
  * for a given segment.
+  *
+  * <p>仅用于存储消息的追加日志。
+  * 日志是一个LogSegments序列，每个都有一个基本偏移量，表示该段中的第一条消息。
+  * <p>
+  *   根据可配置策略创建新的日志段，该策略控制给定段的字节大小或时间间隔。
+  * <p>
  *
  * @param dir The directory in which log segments are created.
  * @param config The log configuration settings

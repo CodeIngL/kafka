@@ -53,6 +53,9 @@ import org.apache.kafka.common.{ClusterResource, Node}
 import scala.collection.JavaConverters._
 import scala.collection.{Map, Seq, mutable}
 
+/**
+  * kafka对象
+  */
 object KafkaServer {
   // Copy the subset of properties that are relevant to Logs
   // I'm listing out individual properties here since the names are slightly different in each Config class...
@@ -98,12 +101,19 @@ object KafkaServer {
 /**
  * Represents the lifecycle of a single Kafka broker. Handles all functionality required
  * to start up and shutdown a single Kafka node.
+  * <p>
+  *   代表单个Kafka broker的生命周期。 处理启动和关闭单个Kafka节点所需的所有功能。
  */
 class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNamePrefix: Option[String] = None,
                   kafkaMetricsReporters: Seq[KafkaMetricsReporter] = List()) extends Logging with KafkaMetricsGroup {
+  //服务状态
   private val startupComplete = new AtomicBoolean(false)
+  //服务状态
   private val isShuttingDown = new AtomicBoolean(false)
+  //服务状态
   private val isStartingUp = new AtomicBoolean(false)
+
+
 
   private var shutdownLatch = new CountDownLatch(1)
 
@@ -113,6 +123,7 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
 
   var metrics: Metrics = null
 
+  //broker状态
   val brokerState: BrokerState = new BrokerState
 
   var dataPlaneRequestProcessor: KafkaApis = null
@@ -188,39 +199,50 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
   /**
    * Start up API for bringing up a single instance of the Kafka server.
    * Instantiates the LogManager, the SocketServer and the request handlers - KafkaRequestHandlers
+    * <p>
+    *   启动API来启动Kafka服务器的单个实例。 实例化LogManager，SocketServer和请求处理程序-KafkaRequestHandler
    */
   def startup() {
     try {
       info("starting")
 
+      //服务状态
       if (isShuttingDown.get)
         throw new IllegalStateException("Kafka server is still shutting down, cannot re-start!")
 
+      //服务状态
       if (startupComplete.get)
         return
 
+      //启动
       val canStartup = isStartingUp.compareAndSet(false, true)
       if (canStartup) {
         brokerState.newState(Starting)
 
         /* setup zookeeper */
+        //设置zk
         initZkClient(time)
 
         /* Get or create cluster_id */
+        //获得or构建集群的id
         _clusterId = getOrGenerateClusterId(zkClient)
         info(s"Cluster ID = $clusterId")
 
         /* generate brokerId */
+        // 生成brokerId
         val (brokerId, initialOfflineDirs) = getBrokerIdAndOfflineDirs
         config.brokerId = brokerId
+        //构建日志
         logContext = new LogContext(s"[KafkaServer id=${config.brokerId}] ")
         this.logIdent = logContext.logPrefix
 
         // initialize dynamic broker configs from ZooKeeper. Any updates made after this will be
         // applied after DynamicConfigManager starts.
+        // 初始化来自zk的动态配置
         config.dynamicConfig.initialize(zkClient)
 
         /* start scheduler */
+        // 开始调度服务
         kafkaScheduler = new KafkaScheduler(config.backgroundThreads)
         kafkaScheduler.startup()
 
@@ -233,6 +255,7 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
         /* register broker metrics */
         _brokerTopicStats = new BrokerTopicStats
 
+        //quota管理器
         quotaManagers = QuotaFactory.instantiate(config, metrics, time, threadNamePrefix.getOrElse(""))
         notifyClusterListeners(kafkaMetricsReporters ++ metrics.reporters.asScala)
 
@@ -255,6 +278,7 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
         socketServer.startup(startupProcessors = false)
 
         /* start replica manager */
+        //副本管理器
         replicaManager = createReplicaManager(isShuttingDown)
         replicaManager.startup()
 
